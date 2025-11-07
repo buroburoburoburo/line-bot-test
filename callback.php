@@ -10,6 +10,12 @@ if (!empty($data['events'][0]['message']) && $data['events'][0]['message']['type
     $replyToken = $data['events'][0]['replyToken'];
     $messageId = $data['events'][0]['message']['id'];
 
+    // uploadsフォルダを作成（なければ）
+    $uploadDir = __DIR__ . "/uploads";
+    if (!file_exists($uploadDir)) {
+        mkdir($uploadDir, 0777, true);
+    }
+
     // LINEから画像を取得
     $ch = curl_init("https://api-data.line.me/v2/bot/message/{$messageId}/content");
     curl_setopt($ch, CURLOPT_HTTPHEADER, ["Authorization: Bearer {$access_token}"]);
@@ -17,8 +23,9 @@ if (!empty($data['events'][0]['message']) && $data['events'][0]['message']['type
     $img_data = curl_exec($ch);
     curl_close($ch);
 
-    // 画像を一時保存
-    $img_path = __DIR__ . "/uploads/{$messageId}.jpg";
+    // ユニークなファイル名で保存
+    $timestamp = date("Ymd_His");
+    $img_path = "{$uploadDir}/{$timestamp}.jpg";
     file_put_contents($img_path, $img_data);
 
     // CalorieMama APIへ送信
@@ -35,16 +42,24 @@ if (!empty($data['events'][0]['message']) && $data['events'][0]['message']['type
     $response = curl_exec($curl);
     curl_close($curl);
 
-    // 結果を保存（後でindex.phpで表示する）
-    file_put_contents(__DIR__ . "/result.json", $response);
+    // 結果をユニークなファイルに保存
+    $result_path = __DIR__ . "/results/result_{$timestamp}.json";
+    if (!file_exists(__DIR__ . "/results")) {
+        mkdir(__DIR__ . "/results", 0777, true);
+    }
+    file_put_contents($result_path, $response);
+
+    // 最新結果へのシンボリックリンクを作成（index.php用）
+    symlink($result_path, __DIR__ . "/result_latest.json");
 
     // ユーザーに返信
     $reply = [
         'replyToken' => $replyToken,
         'messages' => [
-            ['type' => 'text', 'text' => '画像を解析中です！数秒後に結果ページを確認してください。']
+            ['type' => 'text', 'text' => "画像を解析しました！\n結果はこちら:\nhttps://line-bot-test-bk37.onrender.com"]
         ]
     ];
+
     $ch = curl_init('https://api.line.me/v2/bot/message/reply');
     curl_setopt_array($ch, [
         CURLOPT_POST => true,
