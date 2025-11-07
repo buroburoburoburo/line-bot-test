@@ -1,34 +1,32 @@
 <?php
-// チャネルアクセストークン（Messaging API設定画面で発行）
-$access_token = 'nMdpRsipbRbnb2LhpFzdNjUAv2FRUJPrTDtdYY9UeKTMWaS7vap2M84JsUOvLGxw0ctninsD6sFTUIx8sETnE7K8OgGCObdFIQUPYZWqRejOLd+Fy61qG/Rm988TbtALitMtEJQoXRx4OkPnCk93QAdB04t89/1O/w1cDnyilFU=';
-
-// LINEからのリクエストを取得
-$json = file_get_contents('php://input');
-$data = json_decode($json, true);
-
-// メッセージを取り出す
-$text = $data['events'][0]['message']['text'] ?? '';
-$replyToken = $data['events'][0]['replyToken'] ?? '';
-
-// オウム返し（送られたメッセージをそのまま返す）
-if ($text) {
-    $response = [
-        'replyToken' => $replyToken,
-        'messages' => [
-            ['type' => 'text', 'text' => "あなたが送ったのは：「{$text}」ですね！"]
-        ]
-    ];
-
-    $ch = curl_init('https://api.line.me/v2/bot/message/reply');
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/json',
-        'Authorization: Bearer ' . $access_token
-    ]);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($response));
-    $result = curl_exec($ch);
-    curl_close($ch);
+$result_path = __DIR__ . '/result.json';
+if (!file_exists($result_path)) {
+    echo "<h2>まだ解析結果がありません。</h2>";
+    exit;
 }
-echo "OK";
+
+$json = json_decode(file_get_contents($result_path), true);
+$foods = $json['results'][0]['items'] ?? [];
+?>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>カロリー解析結果</title>
+</head>
+<body>
+<h1>カロリー解析結果</h1>
+<?php if ($foods): ?>
+<ul>
+<?php foreach ($foods as $food): ?>
+    <li>
+        <b><?= htmlspecialchars($food['name_jp'] ?? $food['name_en']) ?></b>：
+        <?= htmlspecialchars(round($food['calories'], 1)) ?> kcal
+    </li>
+<?php endforeach; ?>
+</ul>
+<?php else: ?>
+<p>食品が検出されませんでした。</p>
+<?php endif; ?>
+</body>
+</html>
