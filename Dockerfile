@@ -1,16 +1,17 @@
-# PHP + Apache イメージ
+# ベースイメージ（Apache付きのPHP）
 FROM php:8.2-apache
 
-# 拡張を入れたい場合（例：curl）
+# 必要な拡張をインストール（LINE Bot SDKなどに必要なことが多い）
 RUN docker-php-ext-install pdo pdo_mysql
 
-# ソースコードを Apache の公開ディレクトリへコピー
+# ソースコードをコピー
 COPY . /var/www/html/
 
-# Apache の設定を許可
+# Apacheユーザー権限設定
 RUN chown -R www-data:www-data /var/www/html
 
-# Render に「サーバーが起動中」と認識させるために
+# Renderに「起動完了」を知らせるコマンド
 CMD ["apache2-foreground"]
 
+# ポート80を開放
 EXPOSE 80
