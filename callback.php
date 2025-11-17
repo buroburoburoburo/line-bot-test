@@ -1,125 +1,124 @@
 <?php
-// ------------------------------
+// -------------------------------------------------
 // 設定
-// ------------------------------
-$LINE_ACCESS_TOKEN = "【LINEチャネルアクセストークン】";
-$CALORIE_API_KEY   = "【CalorieMama APIキー】";
+// -------------------------------------------------
+$channelAccessToken = "nMdpRsipbRbnb2LhpFzdNjUAv2FRUJPrTDtdYY9UeKTMWaS7vap2M84JsUOvLGxw0ctninsD6sFTUIx8sETnE7K8OgGCObdFIQUPYZWqRejOLd+Fy61qG/Rm988TbtALitMtEJQoXRx4OkPnCk93QAdB04t89/1O/w1cDnyilFU=";
+$channelSecret      = "7d476031f0cd9aa123139ab88c3a0d13";
+$calorieMamaApiKey  = "4207c53db948f046dfb21bfb45ccfc8f";
 
-// ------------------------------
-// ① LINEから受信データ取得
-// ------------------------------
-$json = file_get_contents("php://input");
-$data = json_decode($json, true);
+$logDir = __DIR__ . "/log";
+if (!file_exists($logDir)) mkdir($logDir, 0777, true);
 
-// 画像以外のメッセージは無視
-if (empty($data["events"][0]["message"]) ||
-    $data["events"][0]["message"]["type"] !== "image") {
-    exit;
+// -------------------------------------------------
+// LINE署名チェック
+// -------------------------------------------------
+$signature = $_SERVER["HTTP_X_LINE_SIGNATURE"] ?? '';
+$body = file_get_contents("php://input");
+file_put_contents($logDir . "/latest_webhook.json", $body);
+
+// 署名チェック
+if (!hash_equals(base64_encode(hash_hmac('sha256', $body, $channelSecret, true)), $signature)) {
+    http_response_code(403);
+    exit("Invalid signature");
 }
 
-$replyToken = $data["events"][0]["replyToken"];
-$messageId  = $data["events"][0]["message"]["id"];
+$events = json_decode($body, true)["events"] ?? [];
 
-// ------------------------------
-// ② LINE 画像データ取得
-// ------------------------------
-$ch = curl_init("https://api-data.line.me/v2/bot/message/{$messageId}/content");
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, ["Authorization: Bearer {$LINE_ACCESS_TOKEN}"]);
-$img_bin = curl_exec($ch);
-curl_close($ch);
+foreach ($events as $event) {
 
-// 取得失敗時
-if (!$img_bin) {
-    replyText($replyToken, "画像を取得できませんでした。");
-    exit;
+    // -------------------------------------------------
+    // 画像メッセージのみ処理
+    // -------------------------------------------------
+    if ($event["type"] === "message" && $event["message"]["type"] === "image") {
+
+        $replyToken = $event["replyToken"];
+        $messageId = $event["message"]["id"];
+
+        // ① LINE から画像を取得
+        $url = "https://api-data.line.me/v2/bot/message/$messageId/content";
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            "Authorization: Bearer {$channelAccessToken}"
+        ]);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        $imgData = curl_exec($ch);
+        curl_close($ch);
+
+        if (!$imgData) {
+            replyMessage($replyToken, "画像を取得できませんでした。");
+            exit;
+        }
+
+        // ② 一時保存
+        $tmpPath = __DIR__ . "/tmp_image.jpg";
+        file_put_contents($tmpPath, $imgData);
+
+        // ③ Calorie Mama API へ送る
+        $apiUrl = "https://api.caloriemama.ai/v1/foodrecognition";
+        $postFields = [
+            "file" => new CURLFile($tmpPath)
+        ];
+        $ch = curl_init($apiUrl);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            "x-api-key: {$calorieMamaApiKey}"
+        ]);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $postFields);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        $response = curl_exec($ch);
+        curl_close($ch);
+
+        $result = json_decode($response, true);
+
+        // ④ JSON保存（index.php 用）
+        $resultDir = __DIR__ . "/results";
+        if (!file_exists($resultDir)) mkdir($resultDir, 0777, true);
+
+        $timestamp = date("Ymd_His");
+        $resultPath = "{$resultDir}/result_{$timestamp}.json";
+        file_put_contents($resultPath, $response);
+
+        // 最新リンク
+        @unlink("{$resultDir}/result_latest.json");
+        symlink($resultPath, "{$resultDir}/result_latest.json");
+
+        // ⑤ LINEへ返信
+        if (!empty($result["results"])) {
+            $text = "解析しました！\n";
+            foreach ($result["results"] as $item) {
+                $text .= "{$item['name']}：約 {$item['calories']} kcal\n";
+            }
+        } else {
+            $text = "食品が検出できませんでした。";
+        }
+
+        replyMessage($replyToken, $text);
+    }
 }
 
-// 画像保存
-$upload_dir = __DIR__ . "/uploads";
-if (!file_exists($upload_dir)) mkdir($upload_dir, 0777, true);
+// -------------------------------------------------
+// 返信用関数
+// -------------------------------------------------
+function replyMessage($replyToken, $message)
+{
+    global $channelAccessToken;
 
-$timestamp = date("Ymd_His");
-$img_path = "{$upload_dir}/img_{$timestamp}.jpg";
-file_put_contents($img_path, $img_bin);
-
-// ------------------------------
-// ③ CalorieMama API へ画像送信
-// ------------------------------
-$curl = curl_init("https://api-portal.caloriemama.ai/v1/food_recognitions?locale=ja_JP");
-$cfile = new CURLFile($img_path, "image/jpeg", "upload.jpg");
-
-curl_setopt_array($curl, [
-    CURLOPT_POST => true,
-    CURLOPT_HTTPHEADER => ["Authorization: Bearer {$CALORIE_API_KEY}"],
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_POSTFIELDS => ["image_file" => $cfile]
-]);
-$api_response = curl_exec($curl);
-curl_close($curl);
-
-if (!$api_response) {
-    replyText($replyToken, "カロリー解析に失敗しました。");
-    exit;
-}
-
-$data = json_decode($api_response, true);
-
-// ------------------------------
-// ④ カロリー解析結果を生成
-// ------------------------------
-if (empty($data["results"])) {
-    replyText($replyToken, "食品が検出されませんでした。");
-    exit;
-}
-
-$reply_text = "解析結果：\n";
-
-foreach ($data["results"] as $food) {
-
-    // 食品名
-    $name =
-        $food["food_name"] ??
-        $food["group"] ??
-        ($food["recognition_results"][0]["name"] ?? "不明な食品");
-
-    // カロリー
-    $cal =
-        $food["calories"] ??
-        ($food["nutrition"]["calories"] ?? "不明");
-
-    $reply_text .= "{$name}： 約 {$cal} kcal\n";
-}
-
-// ------------------------------
-// ⑤ LINE へ返信
-// ------------------------------
-replyText($replyToken, $reply_text);
-
-
-// ------------------------------
-// 共通：テキスト返信関数
-// ------------------------------
-function replyText($replyToken, $text) {
-    global $LINE_ACCESS_TOKEN;
-
-    $reply = [
+    $url = "https://api.line.me/v2/bot/message/reply";
+    $postData = [
         "replyToken" => $replyToken,
         "messages" => [
-            ["type" => "text", "text" => $text]
+            ["type" => "text", "text" => $message]
         ]
     ];
 
-    $ch = curl_init("https://api.line.me/v2/bot/message/reply");
-    curl_setopt_array($ch, [
-        CURLOPT_POST => true,
-        CURLOPT_HTTPHEADER => [
-            "Content-Type: application/json",
-            "Authorization: Bearer {$LINE_ACCESS_TOKEN}"
-        ],
-        CURLOPT_POSTFIELDS => json_encode($reply),
-        CURLOPT_RETURNTRANSFER => true
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        "Content-Type: application/json",
+        "Authorization: Bearer {$channelAccessToken}"
     ]);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($postData));
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_exec($ch);
     curl_close($ch);
 }
