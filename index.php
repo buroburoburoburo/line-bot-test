@@ -1,59 +1,80 @@
 <?php
-$dsn = "mysql:host=localhost;dbname=health;charset=utf8";
-$user = "root";
-$pass = "AdminDef";
-
+// -------------------------------------------------
+// DB 接続
+// -------------------------------------------------
 try {
-    $pdo = new PDO($dsn, $user, $pass);
-
-    $stmt = $pdo->query("SELECT * FROM foodlog ORDER BY id DESC");
-    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
+    $pdo = new PDO(
+        "mysql:host=127.0.0.1;dbname=health;charset=utf8",
+        "root",
+        "AdminDef",
+        [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+    );
 } catch (PDOException $e) {
-    echo "DB Error: " . $e->getMessage();
-    exit;
+    exit("DB Error: " . $e->getMessage());
 }
+
+// -------------------------------------------------
+// 画像一覧を取得（最新順）
+// -------------------------------------------------
+$sql = "SELECT * FROM food_images ORDER BY created_at DESC";
+$stmt = $pdo->query($sql);
+$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>解析一覧</title>
+<title>送信した画像一覧</title>
 <style>
-table { width: 100%; border-collapse: collapse; }
-td, th { padding: 10px; border: 1px solid #ccc; }
-img { width: 150px; border-radius: 8px; }
+    body {
+        font-family: Arial, sans-serif;
+        background: #f3f3f3;
+        padding: 20px;
+    }
+    h1 {
+        margin-bottom: 20px;
+    }
+    .card {
+        background: white;
+        width: 320px;
+        margin: 15px;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0px 2px 10px rgba(0,0,0,0.1);
+        display: inline-block;
+        vertical-align: top;
+    }
+    .card img {
+        width: 100%;
+        border-radius: 10px;
+        cursor: pointer;
+    }
+    .info {
+        margin-top: 10px;
+        font-size: 14px;
+        color: #444;
+    }
 </style>
 </head>
 <body>
 
-<h2>LINE から送った画像一覧</h2>
+<h1>送信した画像一覧</h1>
 
-<table>
-<tr>
-    <th>画像</th>
-    <th>結果</th>
-    <th>合計 kcal</th>
-    <th>日時</th>
-</tr>
+<?php if (empty($rows)): ?>
+    <p>まだ画像がありません。</p>
+<?php endif; ?>
 
-<?php foreach ($rows as $r): ?>
-<tr>
-    <td><img src="<?= $r['imagePath'] ?>"></td>
-    <td>
-        <?php
-            $items = json_decode($r["calories"], true);
-            foreach ($items as $i) {
-                echo "{$i['name']}：{$i['calories']} kcal<br>";
-            }
-        ?>
-    </td>
-    <td><?= $r["total"] ?> kcal</td>
-    <td><?= $r["created"] ?></td>
-</tr>
+<?php foreach ($rows as $row): ?>
+    <div class="card">
+        <img src="<?= htmlspecialchars($row['image_path']) ?>" alt="food">
+
+        <div class="info">
+            <strong>DAY:</strong> <?= htmlspecialchars($row['day']) ?><br>
+            <strong>UserID:</strong> <?= htmlspecialchars($row['userId']) ?><br>
+            <strong>日時:</strong> <?= htmlspecialchars($row['created_at']) ?>
+        </div>
+    </div>
 <?php endforeach; ?>
-
-</table>
 
 </body>
 </html>
