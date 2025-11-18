@@ -14,9 +14,7 @@ $pdo = new PDO(
 $imageDir = __DIR__ . "/images";
 if (!file_exists($imageDir)) mkdir($imageDir, 0777, true);
 
-// -------------------------------------------------
 // LINE署名チェック
-// -------------------------------------------------
 $signature = $_SERVER["HTTP_X_LINE_SIGNATURE"] ?? '';
 $body = file_get_contents("php://input");
 
@@ -27,9 +25,7 @@ if (!hash_equals(base64_encode(hash_hmac('sha256', $body, $channelSecret, true))
 
 $events = json_decode($body, true)["events"] ?? [];
 
-// -------------------------------------------------
 // メイン処理
-// -------------------------------------------------
 foreach ($events as $event) {
 
     if ($event["type"] === "message" && $event["message"]["type"] === "image") {
