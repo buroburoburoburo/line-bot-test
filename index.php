@@ -1,61 +1,59 @@
 <?php
-// -------------------------------------------------
-// 最新の解析結果を表示するページ
-// -------------------------------------------------
+$dsn = "mysql:host=localhost;dbname=health;charset=utf8";
+$user = "root";
+$pass = "AdminDef";
 
-$resultFile = __DIR__ . "/results/result_latest.json";
+try {
+    $pdo = new PDO($dsn, $user, $pass);
 
+    $stmt = $pdo->query("SELECT * FROM foodlog ORDER BY id DESC");
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+} catch (PDOException $e) {
+    echo "DB Error: " . $e->getMessage();
+    exit;
+}
 ?>
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <title>カロリー解析結果</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        h1 {
-            color: #444;
-        }
-        .food {
-            padding: 8px;
-            border-bottom: 1px solid #ccc;
-        }
-    </style>
+<meta charset="UTF-8">
+<title>解析一覧</title>
+<style>
+table { width: 100%; border-collapse: collapse; }
+td, th { padding: 10px; border: 1px solid #ccc; }
+img { width: 150px; border-radius: 8px; }
+</style>
 </head>
 <body>
 
-<h1>カロリー解析結果</h1>
+<h2>LINE から送った画像一覧</h2>
 
-<?php
-// -------------------------------------------------
-// JSONが存在するか確認
-// -------------------------------------------------
-if (!file_exists($resultFile)) {
-    echo "<p>まだ解析結果がありません。</p>";
-    exit;
-}
+<table>
+<tr>
+    <th>画像</th>
+    <th>結果</th>
+    <th>合計 kcal</th>
+    <th>日時</th>
+</tr>
 
-$json = json_decode(file_get_contents($resultFile), true);
+<?php foreach ($rows as $r): ?>
+<tr>
+    <td><img src="<?= $r['imagePath'] ?>"></td>
+    <td>
+        <?php
+            $items = json_decode($r["calories"], true);
+            foreach ($items as $i) {
+                echo "{$i['name']}：{$i['calories']} kcal<br>";
+            }
+        ?>
+    </td>
+    <td><?= $r["total"] ?> kcal</td>
+    <td><?= $r["created"] ?></td>
+</tr>
+<?php endforeach; ?>
 
-if (empty($json["results"])) {
-    echo "<p>食品が検出されませんでした。</p>";
-    exit;
-}
-
-// -------------------------------------------------
-// 食品の一覧表示
-// -------------------------------------------------
-echo "<h2>検出された食品</h2>";
-
-foreach ($json["results"] as $item) {
-    $name = htmlspecialchars($item["name"]);
-    $cal  = htmlspecialchars($item["calories"]);
-    echo "<div class='food'>{$name} — 約 {$cal} kcal</div>";
-}
-?>
+</table>
 
 </body>
 </html>
