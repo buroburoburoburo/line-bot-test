@@ -1,6 +1,0 @@
-{
-    "name": "line-bot-test",
-    "require": {
-        "php": ">=8.0"
-    }
-}
