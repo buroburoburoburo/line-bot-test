@@ -7,7 +7,7 @@ $calorieMamaApiKey  = "4207c53db948f046dfb21bfb45ccfc8f";
 // DB 接続
 // -------------------------------------------------
 $pdo = new PDO(
-    "mysql:host=host.docker.internal;dbname=health;charset=utf8",
+    "mysql:host=host.docker.internal;port=3306;dbname=health;charset=utf8",
     "root",
     "AdminDef"
 );
